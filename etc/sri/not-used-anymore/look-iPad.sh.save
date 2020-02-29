@@ -1,0 +1,11 @@
+#!/bin/bash
+PATH=/root/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/development/cpp11/Ice/SRI:
+
+IPAD_T1="$(lsusb | grep iPad)"
+echo "$IPAD_T1"
+
+if echo "$IPAD_T1" | grep -q "iPad"; then
+    (cd /root/development/cpp11/Ice/SRI/ ;/usr/bin/nohup /usr/bin/python /root/development/cpp11/Ice/SRI/echoipad.py > /root/development/cpp11/Ice/SRI/nohup.out 2>&1 &);
+else
+    echo "no match";
+fi

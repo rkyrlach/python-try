@@ -1,0 +1,9 @@
+[Unit]
+Description=Socket daemon for the usbmux protocol used by Apple devices
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=3
+ExecStart=/usr/sbin/usbmuxd --user usbmux --systemd
+PIDFile=/var/run/usbmuxd.pid

@@ -1,0 +1,50 @@
+This directory (/etc/sri) contains information describing how
+the BeagleBone will configure itself during boot.
+
+Each pair of controllers will be assigned to a lane number.
+
+A specific controller will either act as a Lane controller or
+Car controller.
+
+A Car controller will initiate the hostapd service and act as
+an access point with its ESSID specific to a lane number and
+the channel assigned similarly.
+
+A Lane controller will initiate the wpa_supplicant service and
+act as a station attempting to connect to the ESSID assigned
+to that lane.
+
+All Car controllers will use the IP 10.0.0.1
+All Lane controllers will use the IP 10.0.0.2
+
+The subnet assigned will be a /28
+
+The host file for all controllers will have the following
+entries assigned for communication between them:
+
+10.0.0.1        car
+10.0.0.2        lane
+
+Connected to each controller will be a dipswitch device
+that can be read on the SPI bus to determine whether the
+controller is acting as a Car or Lane controller and what
+ID the Car or Lane controller is assigned to.  This
+information will be used to determine what services are
+started and what configuration files are used (or generated)
+for each controller.
+
+A shell script will be executed that is responsible for
+configuring the proper service and starting it with
+systemd.  At boot time, no services will be started
+automatically.  The script in this directory will probe
+the dipswitch register and perform the proper configuration.
+
+The two services we need to toggle between are:
+   wpa_supplicant@wlan0.service
+   hostapd.service
+
+
+/lib/systemd/system/usbmuxd.service file has a restart command added so this file need to be
+coppied for the iPad hotplug fix
+
+

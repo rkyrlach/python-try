@@ -1,0 +1,387 @@
+Traceback (most recent call last):
+  File "/home/sri/srip/server.py", line 4, in <module>
+    import SRV
+  File "/home/sri/srip/SRV.py", line 48
+    pass print(" conection reset by client ") # Handle error here
+             ^
+SyntaxError: invalid syntax
+Traceback (most recent call last):
+  File "/home/sri/srip/server.py", line 4, in <module>
+    import SRV
+  File "/home/sri/srip/SRV.py", line 48
+    pass print(" conection reset by client ") # Handle error here
+             ^
+SyntaxError: invalid syntax
+Traceback (most recent call last):
+  File "/home/sri/srip/server.py", line 4, in <module>
+    import SRV
+  File "/home/sri/srip/SRV.py", line 48
+    pass print(" conection reset by client ") # Handle error here
+             ^
+SyntaxError: invalid syntax
+
+no match
+peertalk starting
+usbmux status =  None
+[<usbmux.MuxDevice object at 0xb6658310>]
+Waiting for devices...
+connecting to device <MuxDevice: ID 1 ProdID 0x12ab Serial 'b'17506777147e51f79c10a61d7b3b5ed70147f388'' Location 0x10002>
+<MuxDevice: ID 1 ProdID 0x12ab Serial 'b'17506777147e51f79c10a61d7b3b5ed70147f388'' Location 0x10002>
+ --------  Starting client now ----------- 
+ external message =  r
+type quit to exit!
+ external message =  ca,255,0,0,0,0,0
+ external message =  ct,255,0,0,0,0,0
+ external message =  ca,255,0,0,0,0,0
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+
+no match
+peertalk starting
+usbmux status =  None
+[<usbmux.MuxDevice object at 0xb67672d0>]
+Waiting for devices...
+connecting to device <MuxDevice: ID 1 ProdID 0x12ab Serial 'b'17506777147e51f79c10a61d7b3b5ed70147f388'' Location 0x10003>
+<MuxDevice: ID 1 ProdID 0x12ab Serial 'b'17506777147e51f79c10a61d7b3b5ed70147f388'' Location 0x10003>
+ --------  Starting client now ----------- 
+ external message =  r
+type quit to exit!
+id,1
+
+ external message =  ct,255,0,0,0,0,0
+ external message =  ca,255,0,0,0,0,0
+ external message =  ct,255,0,0,0,0,0
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+ external message =  ca,255,255,255,0,0,0
+ external message =  ct,0,0,0,255,0,0
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+ external message =  ca,0,255,0,0,0,0
+ external message =  ct,0,255,0,0,0,0
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+ external message =  ca,255,0,0,0,0,0
+id,1
+
+ external message =  ct,255,0,0,0,0,0
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+
+id,1
+

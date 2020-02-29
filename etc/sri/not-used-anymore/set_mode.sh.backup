@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Look at mode button for press
+BTN_MODE=$(cat /sys/class/gpio/gpio68/value)
+
+MODE="car"
+
+if [ "$BTN_MODE" == "1" ];
+then
+	MODE="lane"
+fi
+
+# Do not configure the wireless lan interface
+/bin/rm -f /etc/systemd/network/wlan0.network
+
+# Stop and disable wireless lan services
+systemctl stop hostapd.service
+systemctl disable hostapd.service
+systemctl stop wpa_supplicant@wlan0.service
+systemctl disable wpa_supplicant@wlan0.service
+
+# Stop and disable server services
+systemctl stop sri-server.service
+systemctl disable sri-server.service
+
+
+case "$MODE" in
+lane)
+	echo "Setting up mode as Lane Controller..."
+	/bin/ln -s /etc/sri/wlan0-wpa.network /etc/systemd/network/wlan0.network
+	systemctl restart systemd-networkd.service
+	systemctl enable wpa_supplicant@wlan0.service
+	systemctl start wpa_supplicant@wlan0.service
+	echo 1 > /sys/class/leds/red/brightness
+	;;
+car)
+	echo "Setting up mode as Car Controller..."
+	/bin/ln -s /etc/sri/wlan0-ap.network /etc/systemd/network/wlan0.network
+	systemctl restart systemd-networkd.service
+	systemctl enable hostapd.service
+	systemctl start hostapd.service
+	systemctl enable sri-server.service
+	systemctl start sri-server.service
+	echo 1 > /sys/class/leds/green/brightness
+	;;
+*)
+	echo "No mode set."
+	;;
+esac

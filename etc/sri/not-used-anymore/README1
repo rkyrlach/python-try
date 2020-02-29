@@ -1,0 +1,64 @@
+This directory (/etc/sri) contains information describing how
+the BeagleBone will configure itself during boot.
+
+Each pair of controllers will be assigned to a lane number
+using the first 6 dip switches as a binary number. (no lane zero)
+The lane numbers will be mapped to corresponding IP address
+in intervals of 5... ie 1, 6, 11, 16, 21 ... for lane 1, 2, 3, 4, 5
+                        2, 7, 12, 17, 22 ... for lane 1, 2, 3, 4, 5
+
+A specific controller will either act as a Lane controller or
+Car controller and will be configured as such by the shield that
+is attached to that particular BeaglBone.
+
+I will ask Wes if we can turn the car into the supplicant and 
+use the lane as the AP
+
+A Car controller will initiate the hostapd service and act as
+an access point with its ESSID specific to a lane number and
+the channel assigned similarly.
+
+A Lane controller will initiate the wpa_supplicant service and
+act as a station attempting to connect to the ESSID assigned
+to that lane.
+
+All Car  controllers will use the IP 10.0.0.xx1 or .xx6
+All Lane controllers will use the IP 10.0.0.xx2 or .xx7
+
+The subnet assigned will be a /28
+There will be IP assignments for up to 48 car/lane pairs
+
+The host file for all controllers will have the following
+entries assigned for communication between them:
+
+10.0.0.1        car  (cars  will be .1, .6, .11, ... .246)
+10.0.0.2        lane (lanes will be .2, .7, .12, ... .247)
+
+Connected to each controller will be a dipswitch device
+that can be read on the port pins to determine whether the
+controller is acting as a Car or Lane controller.
+You only need 6 switches to select 48 pairs so set switches
+1 through 6 for the lane assignment. Switches 1 through
+6 must match exactly for the lane and car pair. 
+This information will be used to determine what services are
+
+A shell script will be executed that is responsible for
+configuring the proper service and starting it with systemd.
+At boot time, no services will be started automatically.
+The script in this directory will probe the dipswitch register
+and perform the proper configuration after boot.
+
+Along with this configuration setup will also be auto detecting 
+the turn target and the camera (both located on the car controlor) 
+and possibaly other devices attached to the lane controller and 
+turning on those items as well. Only the specific devices that 
+are being used by a car or a lane will be enabled in each 
+configuration.
+
+The two services we need to toggle between are:
+   wpa_supplicant@wlan0.service
+   hostapd.service
+
+
+Note: /lib/systemd/system/usbmuxd.service file has a restart command 
+      added for iPad re-connect

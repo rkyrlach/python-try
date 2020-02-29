@@ -1,0 +1,58 @@
+This directory (/etc/sri) contains information describing how
+the BeagleBone will configure itself during boot.
+
+Each pair of controllers will be assigned to a lane number
+using the first 6 dip switches as a binary number. (no lane zero)
+The lane numbers will be mapped to a corresponding IP address and ssid
+The ssid's will be assigned uniquely for each client/server pair.
+lane-01 for lane 1, lane-02, lane-03, ... lane-xx
+
+A specific BeagleBone controller will either act as a Lane controller or
+Car controller and will be configured by the shield that is attached to it.
+An input pin on the BBB will be held either high or low by the shield.
+
+Each lane controller will initiate the hostapd service and act as
+an access point (AP) with its ESSID specific to a lane number. We will 
+not broadcast the ssids.
+
+Each car controller will initiate the wpa_supplicant service and
+act as a station attempting to connect to the ESSID assigned
+to that lane. (lane-01 etc)
+
+All Car  controllers will use the IP 10.249.1.1
+All Lane controllers will use the IP 10.249.1.2
+
+The subnet assigned will be a /24
+
+The host file for all controllers will have the following
+entries assigned for communication between them:
+
+10.249.1.1        car  
+10.249.1.2        lane 
+
+Connected to each controller via the attahced shield will be a dipswitch 
+that can be read on the port pins to determine whether the controller is 
+acting as a Car or Lane controller. You only need 6 switches to select 48
+lanes so set switches 1 through 6 for the lane assignment. Switches 1 
+through 6 must match exactly for the lane and car pair. (OR any other
+device that needs to be conected to that lane) This information will be 
+used to determine what services are started and what configuration files 
+are used (or generated) for each controller.
+
+A shell script will be executed that is responsible for configuring the 
+proper service and starting it with systemd. At boot time, no services 
+will be started automatically. The script in this directory will probe 
+the dipswitch register and perform the proper configuration after boot.
+
+Along with this configuration setup will also be auto detecting 
+the turn target and the camera (both located on the car controlor) 
+and possibaly other devices attached to the lane controller and 
+turning on those items as well. Only the specific devices that 
+are being used by a car or a lane will be enabled in each 
+configuration.
+ 
+
+The two services we need to toggle between are:
+   wpa_supplicant@wlan0.service
+   hostapd.service
+

@@ -1,0 +1,22 @@
+import sys
+import subprocess
+import os
+
+subprocess.call(['cp /root/development/cpp11/Ice/SRI/heartbeat /root/development/cpp11/Ice/SRI/toIpad.txt'], shell=True)
+if os.path.isfile('/root/development/cpp11/Ice/SRI/nohup.out'):
+      b = os.path.getsize('/root/development/cpp11/Ice/SRI/nohup.out')
+      if b >= 1:
+         f = open('/root/development/cpp11/Ice/SRI/nohup.out', 'rw')
+         for x in f:
+            ### print x
+            cmd = x
+            if cmd.find("Broken pipe") != -1:
+               ###subprocess.call(['cp "/etc/crontab-connect" "/etc/crontab"'], shell=True)
+               subprocess.call(['systemctl stop sri-running.timer'], shell=True)
+               subprocess.call(['systemctl stop sri-running.service'], shell=True)
+               subprocess.call(['systemctl start sri-connect.timer'], shell=True)
+               subprocess.call(['systemctl start sri-connect.service'], shell=True)
+               os.remove('/root/development/cpp11/Ice/SRI/nohup.out')
+               subprocess.call(['pkill -f client'], shell=True)
+               subprocess.call(['pkill -f python'], shell=True)
+         f.close()

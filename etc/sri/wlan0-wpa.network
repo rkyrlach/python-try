@@ -1,0 +1,13 @@
+[Match]
+Name=wlan0
+
+[Network]
+LinkLocalAddressing=no
+LLMNR=no
+MulticastDNS=no
+IPv6PrivacyExtensions=no
+IPv6AcceptRouterAdvertisements=no
+Domains=sri.local
+Address=10.249.1.3/24
+###Address=10.0.0.2/28
+
