@@ -31,6 +31,7 @@ class Server:
                     print('\r{}:'.format(a),'connected')
                     readable.append(c)      # add the client
                 else:
+                   print(' qs = ++++++++++++++ '. qs.get())
                    data = b'r'                  # old status command (may change) ************************
                    try:                         # try to read from client
                       data = rs.recv(1024)      # is there any new data from the client (a command?)
@@ -46,22 +47,23 @@ class Server:
                       rs.close()
                       done = True
                    else:
-#                     if(len(data) >= 1):
                       print('\r{}:'.format(rs.getpeername()),data)
                       rs.send(data)                                  # echo the received data back to the client
-#                      while (not qs.empty()):
-#                        pos = qs.get(); print('pos = ',pos)
-                      #  rs.send(data)
                       if (data[0] == 99):  lq.put(data)              # light commands go to q for lights.py
                       if (data[0] == 116): mq.put(data)              # motor target commands go to qm for motor.py
-#                      if (data[0] == 104):                           # motor home command
-#                         data = b't,0'
-#                         mq.put(data)                                # motor home command
-                      cq.put(data)                                   # queue up what ever the command is 
-                      print('data put into queue = ', data, " integer command identifier = ", data[0], 
-                             lq.empty(), mq.empty(), cq.empty() )
-
-                      # log command we got from client
-#
+                      if (data[0] == 104): mq.put(data)              # motor home command
+#                     cq.put(data)                                   # queue up what ever the command is
+                      print('data put into queue = ', data, " integer command ID = ", data[0],
+                             lq.empty(), mq.empty(), cq.empty(), qs.empty() )
+                   try:
+                      while (not qs.empty()):
+                        vv = qs.get()
+                        print( " ************** qs *********** ", vv)
+                        rs.send(vv)
+                   except SocketError as e:     # check for socket error
+                      if (e.errno == errno.ECONNRESET):
+                         subprocess.call(['systemctl start sri-server.service'], shell=True);        # rs.close();
+                         raise ConnectionError(" Connection reset by Lane so restart the server ")   # error we are looking for
+                      pass # Handle other errors here if needed
 #
 

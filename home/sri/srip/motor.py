@@ -1,3 +1,4 @@
+
 #!/usr/bin/python3
 from multiprocessing import Process, Array   # multi-processing support
 import threading, time
@@ -10,7 +11,6 @@ import PID                                   # PID routines
 import MOT                                   # config parameters come from this file
 
 """ SRI ATRS Car Motor Controller """
-    #       open a can bus socket.... close it after move
 
     #       // Convert tacho into inches
     #       // wheel diameter = 59mm = 2.322835 inches
@@ -20,84 +20,147 @@ import MOT                                   # config parameters come from this 
     # the VESC updates his status 50 times per second 1/50 = 0.020 milliseconds
     # at full speed the car moves almost 12 inches (67 tachos) in that amount of time
 
-#    myStatus[0] = myStatus[0]     ### mytarget for next move (in tenths of inches)
-#    myStatus[1] = float(cs[0])    ### myposition.value = cs[0] in tachos
-#    myStatus[2] = float(cs[1])    ### myvoltage.value = cs[1]
-#    myStatus[3] = float(cs[2])    ### myerpm.value = int(cs[2])
-#    myStatus[4] = float(cs[3])    ### mymotorcurrent.value = cs[3]
-#    myStatus[5] = float(cs[4])    ### mydutycycle.value = int(cs[4])
-#    myStatus[6] = myStatus[6]     ### myhome.value = saved home tacho value $$$$$$$$$$$$$$$$$
-#    myStatus[7] = myStatus[7]     ### mydeadzone allowance in tachos
-#    myStatus[8] = myStatus[8]     ### mymoving (is the current move finished)
-#    myStatus[9] = myStatus[9]     ### myCommand (from client)
-#    myStatus[10] = myhome         ### magnetic sensor for "home" 0=home, 1=not home
+#    mS[0]  = mS[0]           ### mytarget for next move (in tenths of inches)
+#    mS[1]  = float(cs[0])    ### myposition.value     = cs[0] in tachos
+#    mS[2]  = float(cs[1])    ### myvoltage.value      = cs[1] in volts
+#    mS[3]  = float(cs[2])    ### myeRPM.value         = cs[2] 7x actual rpm
+#    mS[4]  = float(cs[3])    ### mymotorcurrent.value = cs[3] in amps
+#    mS[5]  = float(cs[4])    ### mydutycycle.value    = cs[4] 0-255 (I think)
+#    mS[6]  = mS[6]           ### myhome.value = saved home tacho value
+#    mS[7]  = noHome          ### on init we have no home 0=home is set, 1=no home
+#    mS[8]  = mS[8]           ### mymoving (are we moving?) 0=stopped, 1=moving
+#    mS[9]  = mS[9]           ### myCommand (from client)
+#    mS[10] = myhome          ### magnetic sensor for "home" 0=home, 1=not home
+#    mS[11] = pid_only        ### pid only is on   0=off, 1=PID on
+#    mS[12] = batt_low        ### battery down to 19V or less 0=ok, 1=batt low
+#    mS[13] = jammed          ### car won't move   0=ok, 1=won't move
+#    mS[14] = timeout         ### move timed out   0=ok, 1=timeout
+#    mS[15] = P               ### PID p value                     = av[0]
+#    mS[16] = I               ### PID i value                     = av[1]
+#    mS[17] = D               ### PID d value                     = av[2]
+#    mS[18] = min             ### minimum PID out                 = av[3]
+#    mS[19] = max             ### maximum PID out                 = av[4]
+#    mS[20] = dz              ### dead zone +/- for pid position  = av[5]
+#    mS[21] = tier            ### tier for motion control vectors = av[6]
+#    mS[22] = mtype           ### move type, home=0, normal=1, init=2, cal=3, jam=4, pre-init=5
+#    mS[23] = mvtime          ### elapsed time for this move in microseconds
 
 class Motor:
   global bus
   bus = can.interface.Bus(channel='can0', bustype='socketcan', fd=True)
-  GPIO.setup("P8_15", GPIO.IN)           ### magnetic switch at "home"
+  GPIO.setup("P8_15", GPIO.IN)       ### magnetic switch at "home"
 
   def startController(self, mq, qs): ### starts the actual motor controller and processes motor commands
-    myStatus = Array('d', range(15)) ### common array of 15 for passing status information
-    Motor.stat(self, myStatus)       ### update the status values every time you call this routine
-    myStatus[0] = 0.0                ### make sure target position starts with zero (no move)
-                                     ### before we do this (set home position) I need to make sure we are really home
-                                     ### so I need to amke a subroutine to on initial load "crawl home"
-    myStatus[6] = myStatus[1]        ### set the home command equal to where we are now
+                                     ### basic setup at init of all status parameters
+    mS = Array('d', range(30))       ### common array of 30 for passing status information
+    mS[0] = 0.0                      ### make sure target position starts with zero (no move)
     mot = MOT.MOT()                  ### activate our parameters to be read on the next line
     av = mot.motInit()               ### import the PID values, tier,  and other parameters
-    myStatus[7] = av[5]              ### allowable "dead zone" plus or minus in tachos
-    run_process = Process(target=self.start, args=( myStatus, ))  ### set up the main "motor looop" that runs forever
-    run_process.start()              ### start the main motor controller loop as a "process"
-    done = False                     ### we are not done (indeed just starting)
-    myStatus[8] = 0                  ### we are not moving
-    while (not done):                ### look for motor commands until we are done (until we quit the program completely)
-      while ((not mq.empty()) and (myStatus[8] == 0)):  ### do we have a new motor command??? and are we moving???
-        myStatus[8] = 1.0            ### tell it we are moving
-        m = mq.get()                 ### get the motor command (home or "target")
-        myStatus[9] = float(m[0]); print(' motor cmd from client = ', myStatus[9]) ### debug print the command we think we got
-        m="".join( chr(x) for x in m)  ### python requires me to convert it from byutes to a string
-        if m == "quit":                ### now I can see ifit is time to quit (ie we are done)
-          mytarget.value = -1          ### -1 is used in python as a universal error condition (and we will never move to -1)
-          done = True                  ### besides we are quitting now anyway
-        else:                          ### if we are not done
-          if (m[0] == 'h'):            ### see if we want to go "home"
-            dtm = 0.0; dfh = 0.0;      ### initialize the distance to home and the distance to move both to zero
-            print("--- we are here ", myStatus[1], " home is here ", myStatus[6])  ### debug print how far it is to home?
-            if ((myStatus[1]+myStatus[7] >= myStatus[6]) and (myStatus[1]-myStatus[7] <= myStatus[6])):  
-            ### the above line checks to see if we are with8n the "dead zone" distance of our "home" position
-            ### if(myStatus[10] == 0)    ### magnetic switch says "we are at home" 
-              print(' we seem to be home ', myStatus[10])         ### debug print the magnetic switch status
-                                         ### if we have a home command and we are already home we don't need to do anything
-                                         ### we previously set our distance to home = to zero and our distance to move also zero
-            else:                        ### if we are not home then we need to go home 
-              dfh = myStatus[1] - myStatus[6]       ### calculate distance from home in tachos
-              print( ' we are not home ', dfh)      ### first see if we are within 5 feet of home
-              dtm = round(((dfh-345)/5.755) * 10.0) ### distance to move minus 5 feet for safety (converted tachos to 1/10th inches)
-              print('generated home command in 1/10th inches(-60" safety) = ', -dtm)  ### we are going home so DTM is negative
-                                         ### myStatus[8]=1 says we are moving now (soon) nad myStatus[0] is where we want to go
-              myStatus[8] = 1.0; myStatus[0] = -dtm   ### tell it to "normal move" most of the way home (-5 feet)
-          else:                                       ### if it is not a "home" then it is a "target" move
-            pos = m.find(',')                         ### find the comma (t,600) so we can grab the distance to move
-            print( ' target command from client ' ,m ,pos)  ### debug print where do we want the car?
-            if ( pos >= 1 ):                                ### if there is no comma then do nothing
-              num = float('{}'.format(m)[pos + 1: len(m)])  ### pos part of the target command from the client (iPad)
-              dfh = myStatus[1] - myStatus[6]               ### distance from home (tachos) in other words where are we now?
-              if (abs(dfh) <= myStatus[7]):                 ### are we home by any chane (plus or minus the dead zone)?
-                print ( ' move from home ', myStatus[7])    ### debug print we are moving from home
-              tpt = ((num/10.0) * 5.755)                    ### tpt = target position (in tachos now)
-              print( ' num = ', num, ' home = ', myStatus[6], ' dfh = ', dfh, ' target pos tachos = ', tpt) ### debug print
-              if( tpt >= dfh ):                             ### is target position >= our distance from home then we have 
-                myStatus[0] = round(((tpt-dfh)/5.755)*10.0) ### a positive move (away from shooter)
-                myStatus[8] = 1                             ### flag we are moving (soon)
-                print(" move out further (tachos) ", round(tpt-dfh), 'tachos ', myStatus[0], 'tenth of inches')  ### debug print
-              else:                                         ### if target position is less than our distance from home then
-                myStatus[0] = round(((dfh-tpt)/5.755)*-10.0) ### we have a negative move (back towards shooter)
-                myStatus[8] = 1                              ### flag we are moving (soon)
-                print( " move back closer to home ", round(tpt-dfh), 'tachos ', myStatus[0], 'tenth of inches')  ### debug print
-              print("CMD + stat ", m, myStatus[:])         ### print our command and the cur status
+    mS[6]  = 0.0                     ### no home set yet
+    mS[7]  = 1.0                     ### we don't have a home yet
+    mS[8]  = 0.0                     ### we are stopped
+    Motor.home_ck(self, mS)          ### magnetic sensor (0=home)
+    mS[11] = 1.0                     ### start out with PID on
+    Motor.batt_ck(self,mS)           ### batt OK?
+    mS[13] = 0.0                     ### assume not jammed
+    mS[14] = 0.0                     ### assume no timeout has occurred on init
+    mS[15] = av[0]                   ### PID p value                     = av[0]
+    mS[16] = av[1]                   ### PID i value                     = av[1]
+    mS[17] = av[2]                   ### PID d value                     = av[2]
+    mS[18] = av[3]                   ### minimum PID out                 = av[3]
+    mS[19] = av[4]                   ### maximum PID out                 = av[4]
+    mS[20] = av[5]                   ### dead zone +/- for pid position  = av[5]
+    mS[21] = av[6]                   ### tier for motion control vectors = av[6]
+    mS[22] = 5.0                     ### we are doing startup initialization
+    Motor.stat(self, mS, qs)         ### update the CAN values every time you call this routine
 
-      # qs.put(myStatus)  ### klater we will use our queues to send the status back to the iPad
+    ### set up the main "motor process" that runs forever
+    run_process = Process(target=self.start, args=( mS, qs ))
+    run_process.start()        ### start the main motor controller loop as a "process"
+    Motor.clr_buf(self)        ### flush can buss buffers
+    ### now we start an init loop waiting for the iPad to give us a "home" command
+#    print( ' mag home sensor = ',mS[10], ' move type = ', mS[22])
+#    Motor.lock(self)           ### motor is stopped
+#    Motor.clr_buf(self)        ### clear out can buffers
+#    while (mS[22] == 5.0 and mS[8] == 0.0):
+#      if(not mq.empty()):      ### wait for an iPad command
+#        m = mq.get()           ### wait specifically for a "home" command
+#        if(m[0] == 104):       ### 104 is integer value for 'h'
+#          print( ' in init mode and we got a home command = ',m[0], mS[1], mS[10], mS[12])
+#          Motor.stat(self,mS)  ### get current status
+#          mS[8]  = 1.0         ### we are about to move (so set moving)
+#          mS[9]  = m[0]        ### pass the command
+#          mS[0]  = -10000.0    ### we need to find home so DTH = -10000
+#          mS[23] = 0.0         ### start counting time to move to home
+
+    done = False               ### we are not done (indeed just starting)
+    while (not done):          ### look for motor commands until we are done (until we quit the program completely)
+      while (mq.empty()):      ### wait for a command
+        sleep(0.2)             ### wait a couple tenths of a second
+      m = mq.get()             ### while (mS[8] == 0):
+      mS[9] = float(m[0])      ### save the command
+      print(' motor or home CMD from client = ', mS[9]) ### debug print the command we think we got
+      m="".join( chr(x) for x in m)  ### python requires me to convert it from byutes to a string
+      Motor.clr_buf(self)            ### flush can buss buffers
+      if m == "quit":                ### now I can see if it is time to quit (ie we are done)
+        print(' we have a [q] command = ',mS[9])
+        mytarget.value = -1          ### -1 is used in python as a universal error condition (and we will never move to -1)
+        done = True                  ### besides we are quitting now anyway
+      elif (m[0] == 'h'):            ### see if we want to go "home"
+        print(' we have an [h] command = ',mS[9])
+        dtm = 0.0; dfh = 0.0;        ### initialize the distance to home and the distance to move both to zero
+        if(mS[7]==1):                ### we have no home yet so get one
+          print( ' we got a home command but have NO HOME defined yet ', mS[1], ' batt ', mS[12])
+          print( ' mag home sensor = ',mS[10], ' move type = ', mS[22])
+          Motor.lock(self)           ### motor is stopped
+          lpcnt = 0
+          while(mS[22] == 5.0):      ### cold start motion type = 5.0
+            lpcnt += 1
+            if ((lpcnt % 50) == 0):
+              print( ' try and find home (look for magnetic sensor) ',mS[10])
+        elif (mS[7] == 0):           ### we have a HOME defined so just go home if we are not already home
+          print(' home CMD and home position in tachos has been set ', mS[10]) ### what does magnetic home sensor say?
+          print(" --- we are here ", mS[1], " home is here ", mS[6])  ### debug print how far it is to home?
+          if ( mS[10] == 0):  ### dead zone (mS[1]+mS[20] >= mS[6]) and (mS[1]-mS[20] <= mS[6])
+                              ### and if the magnetic switch says "we are at home"
+            print(' we seem to be home ', mS[10])   ### debug print the magnetic switch status
+                                 ### if we have a home command and we are already home we don't need to do anything
+                                 ### we previously set our distance to home = to zero and our distance to move also zero
+          elif mS[10] == 1:      ### if we are not home then we need to go home
+            dfh = mS[1] - mS[6]  ### calculate distance from home in tachos
+            print( ' we are not home ', dfh)      ### first see if we are within 5 feet of home
+            dtm = round(((dfh-345)/5.755) * 10.0) ### distance to move minus 5 feet for safety (converted tachos to 1/10th inches)
+            print('generated home command in 1/10th inches(-60" safety) = ', -dtm)  ### we are going home so DTM is negative
+                                 ### mS[8]=1 says we are moving now (soon) and mS[0] is where we want to go
+            mS[8] = 1.0; mS[0] = -dtm   ### tell it to "normal move" most of the way home (-5 feet)
+      elif (m[0] == 't'):        ### see if it is a "target" move command
+        print(' we have a [t] command = ',mS[9])
+        if  (mS[7] == 1):        ### only allow moves if we have a valid "home"
+          print(' no HOME defined so do not allow move ',ms[7])
+          break                  ### no move allowed
+        elif(mS[7] == 0):        ### we have "home" defined so we will allow a move
+          pos = m.find(',')      ### find the comma (t,600) so we can grab the distance to move
+          print( ' target command from client ' ,m ,pos)  ### debug print where do we want the car?
+          print("stat ", mS[:])  ### print our command and the cur status
+          if ( pos >= 1 ):       ### if there is no comma then do nothing
+            num = float('{}'.format(m)[pos + 1: len(m)])  ### pos part of the target command from the client (iPad)
+            dfh = mS[1] - mS[6]                       ### distance from home (tachos) in other words where are we now?
+            if (abs(dfh) <= mS[20] or mS[10] == 0):   ### are we home by any chance (plus or minus the dead zone)?
+              print ( ' move from home ', mS[20])     ### debug print we are moving from home
+              tpt = ((num/10.0) * 5.755)              ### tpt = target position (in tachos now)
+              print( ' num = ', num, ' home = ', mS[6], ' dfh = ', dfh, ' target pos tachos = ', tpt) ### debug print
+            if( tpt >= dfh ):                       ### is target position >= our distance from home then we have 
+              mS[0] = round(((tpt-dfh)/5.755)*10.0) ### a positive move out (away from shooter)
+              mS[8] = 1                             ### flag we are moving (soon)
+              print(" move out further (tachos) ", round(tpt-dfh), 'tachos ', mS[0], 'tenth of inches')  ### debug print
+              Motor.stat(self, mS, qs)
+            elif( dfh >= tpt):                       ### if target position is less than our distance from home then
+              mS[0] = round(((dfh-tpt)/5.755)*-10.0) ### we have a negative move (back towards shooter)
+              mS[8] = 1                              ### flag we are moving (soon)
+              Motor.stat(self, mS, qs)
+              print( " move back closer to home ", round(tpt-dfh), 'tachos ', mS[0], 'tenth of inches')  ### debug print
+
+      # qs.put(mS)  ### klater we will use our queues to send the status back to the iPad
 
   ### lock routine keeps the motor off and "not" burning rubber
   def lock(self):     # keeps can alive and motor stopped
@@ -106,6 +169,22 @@ class Motor:
     bus.send(packet)
     packet = Message(arbitration_id=2, data=[0, 0, 0, 0])  ### motor 2
     bus.send(packet)
+
+  def batt_ck(self, mS):             ### check if battery charged?
+    cs = Motor.tacho_get(self)       ### get can buss status
+#    print( ' batt check = ', cs[1])
+    if(cs[1] <= 19.0): 
+       mS[12] = 1                    ### batt dead
+    else:
+       mS[12] = 0                    ### batt OK
+
+  def home_ck(self, mS):             ### check if magnetic home sensor is tripped
+#    print (' home magnet sensor = ', GPIO.input("P8_15"))
+    mS[10] = GPIO.input("P8_15")     ### low = home
+
+  def notify(self, msg_txt, qs):
+    print(" ********* Notify the iPad of our message ********** ", msg_txt)
+    qs.put(msg_txt)     ### put the message into the queue so we can send it on
 
   def clr_buf(self):    ### clear out any accumulated can bus messages to get a "fresh" look at the can status
     cnt = 0             ### this is just a safety precaution. I am not sure if it is needed
@@ -387,58 +466,164 @@ class Motor:
 
   """  ----------------------------------------------------------------------------------- """
   """  ----------------------------------------------------------------------------------- """
+#    mS[0]  = mS[0]           ### mytarget for next move (in tenths of inches)
+#    mS[1]  = float(cs[0])    ### myposition.value     = cs[0] in tachos
+#    mS[2]  = float(cs[1])    ### myvoltage.value      = cs[1] in volts
+#    mS[3]  = float(cs[2])    ### myeRPM.value         = cs[2] 7x actual rpm
+#    mS[4]  = float(cs[3])    ### mymotorcurrent.value = cs[3] in amps
+#    mS[5]  = float(cs[4])    ### mydutycycle.value    = cs[4] 0-255 (I think)
+#    mS[6]  = mS[6]           ### myhome.value = saved home tacho value 
+#    mS[7]  = noHome          ### on init we have no home 0=home is set, 1=no home
+#    mS[8]  = mS[8]           ### mymoving (are we moving?) 0=stopped, 1=moving
+#    mS[9]  = mS[9]           ### myCommand (from client)
+#    mS[10] = myhome          ### magnetic sensor for "home" 0=home, 1=not home
+#    ms[11] = pid_only        ### pid only is on   0=off, 1=PID on
+#    ms[12] = batt_low        ### battery down to 19V or less 0=ok, 1=batt low
+#    ms[13] = jammed          ### car won't move   0=ok, 1=won't move
+#    ms[14] = timeout         ### move timed out   0=ok, 1=timeout
+#    ms[15] = P               ### PID p value                     = av[0]
+#    ms[16] = I               ### PID i value                     = av[1]
+#    ms[17] = D               ### PID d value                     = av[2]
+#    ms[18] = min             ### minimum PID out                 = av[3]
+#    ms[19] = max             ### maximum PID out                 = av[4]
+#    ms[20] = dz              ### dead zone +/- for pid position  = av[5]
+#    ms[21] = tier            ### tier for motion control vectors = av[6]
+#    ms[22] = mtype           ### move type, home=0, normal=1, init=2, cal=3, jam=4
+
   ### this routine updates all status information every time it is called
-  def stat(self, myStatus ):     ### mytarget, mypos, myvoltage, myerpm, mycurrent, myduty, ):
+  def stat(self, mS, qs ):    ### mytarget, mypos, myvoltage, myerpm, mycurrent, myduty, ):
     cs = Motor.tacho_get(self)
-    myStatus[0] = myStatus[0]     ### mytarget for next move (in tenths of inches)
-    myStatus[1] = float(cs[0])    ### myposition.value = cs[0] in tachos
-    myStatus[2] = float(cs[1])    ### myvoltage.value = cs[1]
-    myStatus[3] = float(cs[2])    ### myerpm.value = int(cs[2])
-    myStatus[4] = float(cs[3])    ### mymotorcurrent.value = cs[3]
-    myStatus[5] = float(cs[4])    ### mydutycycle.value = int(cs[4])
-    myStatus[6] = myStatus[6]     ### myhome.value = saved home tacho value $$$$$$$$$$$$$$$$$
-    myStatus[7] = myStatus[7]     ### mydeadzone allowance in tachos
-    myStatus[8] = myStatus[8]     ### mymoving (is the current move finished)
-    myStatus[9] = myStatus[9]     ### myCommand (from client)
-    if GPIO.input("P8_15"):
-      myhome = 1.0
-    else:
-      myhome = 0.0                ### magnetic home switch (1 = not home, 0 = home)
-    myStatus[10] = myhome
+    mS[0]  = mS[0]            ### mytarget for next move (in tenths of inches)
+    mS[1]  = float(cs[0])     ### myposition.value = cs[0] in tachos
+    mS[2]  = float(cs[1])     ### myvoltage.value = cs[1]
+    mS[3]  = float(cs[2])     ### myerpm.value = int(cs[2])
+    mS[4]  = float(cs[3])     ### mymotorcurrent.value = cs[3]
+    mS[5]  = float(cs[4])     ### mydutycycle.value = int(cs[4]
+    mS[6]  = mS[6]            ### myhome.value = saved home tacho value
+    mS[7]  = mS[7]            ### on init we have no home 0=home is set, 1=no home
+    mS[8]  = mS[8]            ### mymoving (are we moving?) 0=stopped, 1=moving
+    mS[9]  = mS[9]            ### myCommand (from client)
+    Motor.home_ck(self, mS)   ### magnetic sensor (0=home) mS[10]
+    mS[11] = mS[11]           ### pid only is on   0=off, 1=PID on
+    Motor.batt_ck(self, mS)   ### batt OK?                 mS[12]
+    mS[13] = mS[13]           ### car won't move   0=ok, 1=won't move
+    mS[14] = mS[14]           ### move timed out   0=ok, 1=timeout
+    mS[15] = mS[15]           ### PID p value                     = av[0]
+    mS[16] = mS[16]           ### PID i value                     = av[1]
+    mS[17] = mS[17]           ### PID d value                     = av[2]
+    mS[18] = mS[18]           ### minimum PID out                 = av[3]
+    mS[19] = mS[19]           ### maximum PID out                 = av[4]
+    mS[20] = mS[20]           ### dead zone +/- for pid position  = av[5]
+    mS[21] = mS[21]           ### tier for motion control vectors = av[6]
+    mS[22] = mS[22]           ### move type, home=0, normal=1, init=2, cal=3, jam=4
+    Motor.notify(self, mS[2], qs) ### try sending back the batt voltage
 
   """  ----------------------------------------------------------------------------------- 
   this routine gets launched at the start of the server and runs forever (until server death)  
        ----------------------------------------------------------------------------------- """
-  def start(self, myStatus, ):
+  def start(self, mS, qs ):
     global bus
-    done = False       ### we are never done
-    print( " -*-*-*-*-*-*- motor target value = ", myStatus[0], ' int cmnd = ', myStatus[9])
-    mot = MOT.MOT()    ### get our intial parameters
-    av = mot.motInit() ### import the PID values, tier,  and other parameters
-    P=av[0]; I=av[1]; D=av[2]; min=av[3]; max=av[4]; dz=av[5]; tier=av[6] ### set them all
-    Motor.stat(self, myStatus)  ### update (read) the current status
+    done = False                ### we are never done
+                                ### pluck our parameters from shared memory structure mS[xx]
+    P=mS[15]; I=mS[16]; D=mS[17]; min=mS[18]; max=mS[19]; dz=mS[20]; tier= mS[21] ### get them all
+    Motor.stat(self, mS, qs)    ### update (read) the current status
+    print(' PID = ', P, I, D)   ### verify PID is real
     pid = PID.PID(P, I, D)      ### init the PID controller
     pid.setSampleTime(0.019999) ### PID sample rate 50 times per second
-    myStatus[7] = dz            ### allowable "dead zone" plus or minus in tachos
+    ### wait here for a home command from iPad on init
+    while (mS[22] == 5.0):
+      Motor.stat(self, mS, qs)
+      #print('sleeping until home command ', mS[22], mS[0], mS[8], mS[9], mS[10], mS[11], mS[12])
+      if (mS[9] != 104.0):
+        sleep (0.01)
+#        break
+      else:
+        mS[8]  = 1.0         ### set we are moving flag
+        mS[0]  = -10000.0    ### we need to find home so DTH = -10000
+        mS[23] = 0.0         ### start counting time to move to home
+        mS[7]  = 1.0         ### no home defined yet
+        mS[22] = 2.0         ### so let's look for home
+#        break
+    ### fake PID loop to go home on init (commanded from iPad)
+    while (mS[22] == 2.0):
+      print("fake PID here *** ", mS[0], mS[3], mS[6], mS[9], mS[10], mS[12],  mS[22])  ### debug position seek mS[0]
+      Motor.stat(self, mS, qs)       # get the current status
+      dest = int(mS[0])
+      pid_out = int(min)
+      forward = False
+      lpcnt = 0
+      # we have to start the motors moving if we are not at "magnetic" home or we can't check eRPM because it will be zero
+      if ( mS[10] == 1.0 ):    ### if the magnetic sensor says we are not home then start the motor
+        print(' starting the motor so we can actually move to home ')
+        while (mS[3] == 0.0):
+          packet = Message(arbitration_id=1, data=[255, 255, 255-pid_out, 255])   # motor 1 PID
+          bus.send(packet)
+          packet = Message(arbitration_id=2, data=[255, 255, 255-pid_out, 255])   # motor 2 PID
+          bus.send(packet)
+          Motor.stat(self, mS, qs)  ### wait until motor gets moving
+        print ("Home destination ", dest, " minimum speed = ", pid_out, ' (False=go home) ', mS[3], mS[10], forward) # debug
+        Motor.clr_buf(self)
+        while (mS[10] == 1 or abs(mS[3]) >= 1 ):   # while eRPM not zero and magnetic sensor not triggered
+          lpcnt +=1; 
+          if ((lpcnt % 50) == 0):
+            print ("Home bound ", dest, " speed = ", pid_out, ' eRPM ', mS[3], ' mag ', mS[10]) # debug print
+          packet = Message(arbitration_id=1, data=[255, 255, 255-pid_out, 255])   # motor 1 PID
+          bus.send(packet)
+          packet = Message(arbitration_id=2, data=[255, 255, 255-pid_out, 255])   # motor 2 PID
+          bus.send(packet)
+          Motor.stat(self, mS, qs)                # get the status
+          sleep(0.01)
+          if (mS[3] == 0 and mS[10] == 1):    # if we stop moving and are not home yet
+            Motor.lock(self)                  # turn off the motors
+            mS[13] = 1                        # we are jammed and not home
+            mS[9]  = 0                        # turn off previous command
+            mS[8]  = 0                        # we are not moving
+            mS[7]  = 1                        # we do not have a valid home any more
+            Motor.notify(self, "PCFS" )       # error message = PCFS = 1
+            mS[22] = 5                        # require same thing as init
+            Motor.start(self, mS)             # re-start the motor controller (verify python is ok with this?)
+#            break
+          if (mS[3] == 0 and mS[10] == 0):
+            print(' we got a magnetic home sensor reading , so set up "home" ', mS[10], mS[1], mS[6])
+            Motor.lock(self)          # if we are there then trun off motor
+            mS[8]  = 0                # trun off "moving" status message
+            mS[7]  = 0                # we do have a "home" now
+            mS[22] = 1                # move mode no longer in init
+            mS[6]  = mS[1]            # now we have a "HOME" position in tachos
+            mS[9]  = 0                # no residual command to fool us
+            mS[0]  = 0                # destination set to mS[1] ???????????
+            Motor.stat(self, mS, qs)  # update status
+#            break
+      elif( mS[10] == 0.0 ): ### mS[10] == 0 means we are home so don't start the motor
+        print(' we got a magnetic home sensor reading " ', mS[10], mS[1], mS[6])
+        Motor.lock(self)          # if we are there then trun off motor
+        mS[8]  = 0                # trun off "moving" status message
+        mS[7]  = 0                # we do have a "home" now
+        mS[22] = 1                # move mode no longer in init
+        mS[9]  = 0                # no residual command to fool us
+        mS[0]  = 0                # destination set to mS[1] ???????????
+        mS[6]  = mS[1]            # now we have a "HOME" position in tachos
+        Motor.stat(self, mS, qs)  # update status
+#        break
+
     while (not done):           ### main motor control loop
         cnt = 0                 ### cnt is used to step through the motion control vectors one step at a time
-#       if (myStatus[0] <= -1 ): return()
         Motor.lock(self)        ### insure motor is "off"
 #       now = datetime.now()
 #       print(now.strftime("%H:%M:%S.%f"))
-        Motor.stat(self, myStatus)          # update status values
-        dd=round((myStatus[0]/10.0)*5.755)  # dd (desired distance) now has the number of tachos we want to move
+        Motor.stat(self, mS, qs)      # update status values
+        dd=round((mS[0]/10.0)*5.755)  # dd (desired distance) now has the number of tachos we want to move
         if (dd > 0): forward = True   # determine the direction we want to go
         else: forward = False         # are we going forward or back towards home
         dds = dd; dd = abs(dd)        # dds (save the desired distance) we know the direction so make DD "positive"
         ss = Motor.plan(self, dd, tier, min, forward) # build our move vectores from the vector tables
         rdist = ss[0]                 # vector for distances
         rvesc = ss[1]                 # vector vor motor speeds (VESC)
-        print( " -*-*-*-*-*-*- start motor target value = ", myStatus[0] )  # debug print of where we are going
-        print("Target = ", myStatus[0], " distance ", dds, " tier ", tier, " direction ", forward)  #debug print
+        print( " -*-*-*-*-*-*- start motor target value = ", mS[0] )  # debug print of where we are going
+        print("Target = ", mS[0], " distance ", dds, " tier ", tier, " direction ", forward)  #debug print
         print("distance vector ",rdist)  # debug print of distances for each move segment
         print("VESC vector is ",rvesc)   # debug print of VESC speed commands for each move segment
-        targetsv = myStatus[0]           # save the target location (save where we are headed)
+        targetsv = mS[0]           # save the target location (save where we are headed)
         mso = time(); t = 0; sci = 0     # keep track of time for this move
         Motor.clr_buf(self)              # clear out the can buss buffer (just in case)
         Motor.lock(self)                 # start out not moving (just in case) we should have been stopped anyway
@@ -482,33 +667,38 @@ class Motor:
           # we incremented to next segment so the previous one is done now (above line)
           if (forward and sp <= 1500 and cnt >= (len(rvesc)/2)): cnt = len(rdist)  # if we are moving slowly, then kick in PID
           if ( not forward and sp >= -1500 and cnt >= (len(rvesc)/2)): cnt = len(rdist)  
+          if (cnt >= 29): cnt = 29
           # no need to wait for all vector segments to finish (otherwise we remain in the "while cnt" loop
 
         ### --- move is over so enable pid ( will home in to target position and then hold us there )
         else:  ### vectors are done or speed has been reduced so go into PID mode
-          print("start PID loop here -------------- ",myStatus[0])  ### debug print the position we seek is in myStatus[0]
-          Motor.stat(self, myStatus)  # get the current status
+          print("start PID loop here -------------- ",mS[0])  ### debug print the position we seek is in mS[0]
+          Motor.stat(self, mS, qs)    # get the current status
           cs = Motor.tacho_get(self)  # get the current can buss info
           dest = int(posAE - posAS)   # destination is the position at start + the size of the move (can be + or - move)
-          if (myStatus[9] == 104): dest = int((myStatus[6]-posAS) - 25)  # modify destination if "home" command
+          if (mS[9] == 104): dest = int((mS[6]-posAS) - 25)  # modify destination if "home" command
           # the reason for above line is to re-adjust the target position to add back in the (5 feet) we shorted the home
           nowT = int(cs[0] - posAS)  # our current target (nowT) is the distance we are from the start position 
           pid.clear                  # clear all the PID parameters to a fresh start
           pid.SetPoint = dest        # set PID to desired destination
           pid.update(nowT)           # feed PID our current position
-          pid_out = pid.output       # get what the PID has to say
+          pid_out = int(pid.output)  # get what the PID has to say
           scale = min/1000           # needs to be scaled
           pid_out = abs(int(pid_out * scale))  # creat the vesc command value from the PID output (make sure itis positive)
-          if (pid_out >= max): pid_out = max   # max PID (from parameters in our setup file) 
-          if (pid_out <= min): pid_out = min   # min PID
+          if (pid_out >= max): pid_out = int(max)   # max PID (from parameters in our setup file) 
+          if (pid_out <= min): pid_out = int(min)   # min PID
           print ("PID destination ", dest, " PID output = ", pid_out, ' (T=For, F=Bak) ', forward) # debug print of PID
           ### PID setup is finished now so go into final while loop (PID finishes current move)
           ### then PID waits for a "new" destination. (ie one that is different from it's current positionj)
-          while (myStatus[0] == targetsv): # while there is now move needed stay here
-            Motor.stat(self, myStatus)     # get the status
+          lpcnt = 0
+          while (mS[0] == targetsv): # while there is now move needed stay here
+            lpcnt += 1
+            if ((lpcnt % 50) == 0):
+              print(' no new target ', mS[:])
+            Motor.stat(self, mS, qs)     # get the status
             if (forward):                  # if we are not at destination and going forward
               while ( cs[0]-posAS <= dest - dz): # do this while loop
-                Motor.stat(self, myStatus)
+                Motor.stat(self, mS, qs)
                 pos_sav = pos; cs = Motor.tacho_get(self);  pos = cs[0]       # print("can status: ",cs)
                 delta_moved = pos - pos_sav; tot_moved = tot_moved + delta_moved
                 vi = cs[1]; sp = cs[2]; cu = cs[3]; du = cs[4]
@@ -527,15 +717,15 @@ class Motor:
                   bus.send(packet)
                 pidu = (cs[0]-posAS)
                 pid.update(pidu)
-                pid_out = pid.output
+                pid_out = int(pid.output)
                 pid_out = abs(int(pid_out * scale))      # creat the vesc command value from the PID output
-                if (pid_out >= max): pid_out = max
-                if (pid_out <= min): pid_out = min       # make sure can can move      pidu
+                if (pid_out >= max): pid_out = int(max)
+                if (pid_out <= min): pid_out = int(min)  # make sure can can move      pidu
                 print (" Trgt ", dest, " tm ", t1, "now @", cs[0], " Erpm ", cs[2], " mot I ", cs[3], " pid = ", pid_out )
 #               cs = Motor.tacho_get(self)
             else:     # if we are not at destination and going backwards (we need to back up)
               while ( cs[0] - posAS >= dest + dz): # do this while loop
-                Motor.stat(self, myStatus)
+                Motor.stat(self, mS, qs)
                 pos_sav = pos; cs = Motor.tacho_get(self);  pos = cs[0]                 # print("can status: ",cs)
                 delta_moved = pos - pos_sav; tot_moved = tot_moved + delta_moved
                 vi = cs[1]; sp = cs[2]; cu = cs[3]; du = cs[4]
@@ -558,17 +748,17 @@ class Motor:
                 pid_out = abs(int(pid_out * scale))      # creat the vesc command value from the PID output
                 #else:
                 #  pid_out = max                         # for from home pid can go up to max
-                if (pid_out >= max): pid_out = max
-                if (pid_out <= min): pid_out = min       # make sure car can move
-                if ((abs(myStatus[1]-myStatus[6]) <= 345)):
-                  pid_out = min                          # on [near] home pid is weakened
+                if (pid_out >= max): pid_out = int(max)
+                if (pid_out <= min): pid_out = int(min)       # make sure car can move
+                if ((abs(mS[1]-mS[6]) <= 345)):
+                  pid_out = int(min)                          # on [near] home pid is weakened
                 print (" Trgt ", dest, ' PID trg ', pidu, " tm ", t1, " now @", cs[0], " Erpm ", cs[2],
                        " mot I ", cs[3], " pid = ", pid_out )
-                if ((abs(myStatus[3] <= 10))): myStatus[8] = 0  ### (abs(dest-pidu)<= dz) or
-                #print('--- are we still moving? ', abs(dest-pidu), ' end move flag = ',myStatus[8])
+                if ((abs(mS[3] <= 10))): mS[8] = 0  ### (abs(dest-pidu)<= dz) or
+                #print('--- are we still moving? ', abs(dest-pidu), ' end move flag = ',mS[8])
             Motor.lock(self) # if we are there then trun off motor
-            myStatus[8] = 0  # trun off "moving" status message
-            Motor.stat(self, myStatus) # update status
+            mS[8] = 0  # trun off "moving" status message
+            Motor.stat(self, mS, qs) # update status
             cs = Motor.tacho_get(self) # get can buss info
             if (cs[0] - posAS >= dest + dz + 1): forward = False  # keep PID on and re-position if some moves us
             if (cs[0] - posAS <= dest - dz - 1): forward = True
